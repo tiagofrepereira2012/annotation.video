@@ -69,63 +69,56 @@ class App(object):
           use_annotation = self.annotations[use_frame]
           break
         use_frame -= 1
-    self.show_keypoints(use_annotation)
+    self.show_keypoints(self.cv, use_annotation)
 
-  def self.on_kp_button_press(self):
+  def on_keypoint_button_press(self, event):
     """What happens when the user clicks close to a key point"""
 
     # Being drag of an object
     # record the item and its location
+    self.dragged = self.cv.find_closest(event.x, event.y)[0]
+    self.cv.itemconfig(self.dragged, outline='white') #paint it in white
 
-    self._drag_data["item"] = self.canvas.find_closest(event.x, event.y)[0]
-    self._drag_data["x"] = event.x
-    self._drag_data["y"] = event.y
-
-  def self.on_kp_button_release(self):
+  def on_keypoint_button_release(self, event):
     """What happens when the user releases a key point"""
 
-    # End drag of an object'''
-    # reset the drag information
-    self._drag_data["item"] = None
-    self._drag_data["x"] = 0
-    self._drag_data["y"] = 0
+    self.cv.itemconfig(self.dragged, outline='yellow')
+    self.dragged = None
 
-  def self.on_kp_motion(self):
+  def on_keypoint_motion(self, event):
     """What happens when the user drags a key point"""
 
     # compute how much this object has moved
-    delta_x = event.x - self._drag_data["x"]
-    delta_y = event.y - self._drag_data["y"]
+    (x, y) = self.cv.coords(self.dragged)
+    delta_x = event.x - x
+    delta_y = event.y - y
 
     # move the object the appropriate amount
-    self.cv.move(self._drag_data["item"], delta_x, delta_y)
+    self.cv.move(self.dragged, delta_x, delta_y)
 
-    # record the new position
-    self._drag_data["x"] = event.x
-    self._drag_data["y"] = event.y
+    # record the point the marking was dropped in the annotations
+    if self.annotations[self.curr_frame] is None:
+      # if it is the first time, save all points
+      self.annotations[self.curr_frame] = \
+          [self.cv.coords(k) for k in self.keypoint]
 
-  def self.add_drag_n_drop(self, widget):
+    else:
+      # otherwise, just save the one that moved
+      index = self.keypoints.index(self.dragged)
+      self.annotations[self.curr_frame][index] = self.cv.coords(self.dragged)
+
+  def add_drag_n_drop(self, widget):
     """Add bindings for clicking, dragging and releasing over any object with
     the "keypoint" tag"""
 
-    widget.tag_bind("keypoint", "<ButtonPress-1>", self.on_kp_button_press)
-    widget.tag_bind("keypoint", "<ButtonRelease-1>", self.on_kp_button_release)
-    widget.tag_bind("keypoint", "<B1-Motion>", self.on_kp_motion)
+    widget.tag_bind("keypoint", "<ButtonPress-1>", 
+        self.on_keypoint_button_press)
+    widget.tag_bind("keypoint", "<ButtonRelease-1>",
+        self.on_keypoint_button_release)
+    widget.tag_bind("keypoint", "<B1-Motion>",
+        self.on_keypoint_motion)
 
-  def self.show_keypoints(self, widget, annotations):
-    """Shows keypoints acording to existing annotations"""
-
-    if annotations is not None:
-      for k in self.keypoints:
-        widget.coords(k, ())
-
-    for k in self.keypoints:
-      widget.itemconfig(k, state=tkinter.NORMAL)
-    self.keypoints.append(widget.create_oval(x-self.radius,
-          y-self.radius, x+self.radius, y+self.radius, outline="yellow",
-          fill=None, tags="keypoint", width=2.0, state=tkinter.HIDDEN))
-    
-  def self.create_keypoints(self, widget):
+  def create_keypoints(self, widget):
     """Creates the keypoints and draw them to the screen, hiding their
     locations"""
 
@@ -138,6 +131,17 @@ class App(object):
     self.keypoints.append(widget.create_oval(x-self.radius,
           y-self.radius, x+self.radius, y+self.radius, outline="yellow",
           fill=None, tags="keypoint", width=2.0, state=tkinter.HIDDEN))
+    
+  def show_keypoints(self, widget, annotations):
+    """Shows keypoints acording to existing annotations"""
+
+    if self.keypoints is None: self.create_keypoints(widget)
+
+    if annotations is not None:
+      for i, k in enumerate(self.keypoints):
+        widget.coords(k, annotations[i])
+
+    for k in self.keypoints: widget.itemconfig(k, state=tkinter.NORMAL)
     
   def __init__(self, master, video, zoom, radius):
  
@@ -168,9 +172,8 @@ class App(object):
 
     # place frame 0 on the screen and start the app
     self.curr_image = None
+    self.keypoints = None
     self.update_image()
-
-    self.create_keypoints(self.cv)
 
     # adds our keyboard bindings
     self.add_keyboard_bindings(master)
@@ -190,7 +193,7 @@ def process_arguments():
       help="Video file to load")
 
   parser.add_argument('-z', '--zoom', dest='zoom', metavar='N',
-      type=int, default=4,
+      type=int, default=2,
       help="Zoom in by the given factor (defaults to %(default)s)")
 
   parser.add_argument('-d', '--annotation-radius', dest='radius',
