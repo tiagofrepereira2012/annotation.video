@@ -106,7 +106,8 @@ class HelpDialog(tkinter.Toplevel):
 class AnnotatorApp(tkinter.Tk):
   """A wrapper for the annotation application"""
   
-  def __init__(self, video, zoom, radius, skip_factor, *args, **kwargs):
+  def __init__(self, video, zoom, radius, skip_factor, input, 
+      output, *args, **kwargs):
 
     tkinter.Tk.__init__(self, *args, **kwargs)
     self.title("annotate")
@@ -117,16 +118,26 @@ class AnnotatorApp(tkinter.Tk):
     self.radius = radius
     self.shape = (zoom*video[0].size[0], zoom*video[0].size[1])
     self.curr_frame = 0
-    self.annotations = {}
     self.skip_factor = skip_factor
     self.immediate_keys = '1234567890abcdefg' #max of 17 points
+    self.output = output
+
+    # load existing annotations if any
+    if input:
+      from .. import load
+      sys.stdout.write("Loading existing annotations from '%s'..." % input)
+      self.annotations = load(input)
+      sys.stdout.write(" OK\n")
+      sys.stdout.flush()
+    else:
+      self.annotations = {}
 
     # needs a better configuration for keypoints
     self.keypoint_config = [
         (self.shape[0]/3, self.shape[1]/3),
-        (self.shape[0]/3+20, self.shape[1]/3),
         (self.shape[0]/3+60, self.shape[1]/3),
-        (self.shape[0]/3+80, self.shape[1]/3),
+        (self.shape[0]/3+150, self.shape[1]/3),
+        (self.shape[0]/3+210, self.shape[1]/3),
         ]
 
     # creates the image canvas
@@ -155,6 +166,30 @@ class AnnotatorApp(tkinter.Tk):
     # some keyboard and mouse bindings
     self.add_keyboard_bindings()
     self.add_drag_n_drop()
+
+    # Capture closing the app -> use to save the file
+    self.protocol("WM_DELETE_WINDOW", self.on_quit)
+
+  def on_quit(self):
+    """On quit we either dump the output to screen or to a file."""
+
+    from .. import save
+
+    if self.annotations:
+
+      if self.output: 
+        sys.stdout("Writing annotations to '%s'..." % self.output)
+        sys.stdout.flush()
+        save(self.annotations, self.output, backup=True)
+        sys.stdout.write(" OK")
+        sys.stdout.flush()
+      else: 
+        sys.stdout.write('\n')
+        sys.stdout.flush()
+        save(self.annotations, sys.stdout)
+        sys.stdout.flush()
+
+    self.destroy()
 
   def on_help(self, event):
     """Creates a help dialog box with the currently enabled commands"""
@@ -295,10 +330,6 @@ class AnnotatorApp(tkinter.Tk):
     else:
       self.canvas.itemconfig(self.curr_image, image=self.curr_photo)
 
-    # updates the status bar
-    self.text_status.set('[goto] frame %03d/%03d' % (self.curr_frame+1, 
-      len(self.video)))
-
     # show keypoints
     use_annotation = self.annotations.get(self.curr_frame, None)
     if use_annotation is None:
@@ -310,6 +341,12 @@ class AnnotatorApp(tkinter.Tk):
           break
         use_frame -= 1
     self.show_keypoints(use_annotation)
+
+    # updates the status bar
+    annotated = ''
+    if self.annotations.has_key(self.curr_frame): annotated = ' (annotated)'
+    self.text_status.set('[goto] frame %03d/%03d %s' % (self.curr_frame+1, 
+      len(self.video), annotated))
 
   def on_keypoint_button_press(self, event):
     """What happens when the user clicks close to a key point
@@ -443,6 +480,14 @@ def process_arguments():
       metavar='N', type=int, default=5,
       help="Default skip factor for frame and point seeking (if you press SHIFT together with motion keys, we still only move 1 frame/point each time; defaults to %(default)s)")
 
+  parser.add_argument('-i', '--input', dest='input',
+      metavar='FILE', type=str, default=None,
+      help="Input file that will be used to preload annotations for the given video")
+
+  parser.add_argument('-o', '--output', dest='output',
+      metavar='FILE', type=str, default=None,
+      help="Output file that will contain the annotations recorded at this session (if not given, dump to stdout; if file exists, a backup is made)")
+
   args = parser.parse_args()
 
   if not os.path.exists(args.video):
@@ -456,6 +501,19 @@ def process_arguments():
 
   if args.skip_factor <= 0:
     parser.error("Cannot use a skip factor <= 0")
+
+  if args.input is not None:
+    if not os.path.exists(args.input):
+      parser.error("Input file '%s' cannot be read" % args.input)
+
+  if args.output:
+    d = os.path.dirname(os.path.realpath(args.output))
+    if not os.path.exists(d): 
+      sys.stdout.write("Creating output directory '%s'..." % (d,))
+      sys.stdout.flush()
+      os.makedirs(d)
+      sys.stdout.write(" OK")
+      sys.stdout.flush()
 
   return args
 
@@ -485,7 +543,8 @@ def main():
   sys.stdout.write(" OK!\nLaunching annotation interface...\n")
   sys.stdout.flush()
 
-  app = AnnotatorApp(v, args.zoom, args.radius, args.skip_factor)
+  app = AnnotatorApp(v, args.zoom, args.radius, args.skip_factor, args.input,
+      args.output)
   app.mainloop()
 
 if __name__ == '__main__':
