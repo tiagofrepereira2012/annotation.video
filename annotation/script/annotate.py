@@ -179,6 +179,20 @@ class AnnotatorApp(tkinter.Tk):
     self.bind("S", self.save)
     self.bind("D", self.on_delete_current_frame_annotations)
 
+  def zoom_compensated(self):
+    """Returns zoom-compensated annotations"""
+
+    def rounded(x, y, z):
+      return (int(round(float(x)/z)), int(round(float(y)/z)))
+
+    import copy
+
+    retval = copy.deepcopy(self.annotations)
+    for key, values in retval.iteritems():
+      retval[key] = [rounded(x,y,self.zoom) for x,y in values]
+
+    return retval
+
   def save(self, *args, **kwargs):
     """Action executed when the user explicitly asks us to save the file"""
 
@@ -190,13 +204,13 @@ class AnnotatorApp(tkinter.Tk):
       if self.output: 
         sys.stdout.write("Writing annotations to '%s'..." % self.output)
         sys.stdout.flush()
-        file_save(self.annotations, self.output, backup=True)
+        file_save(self.zoom_compensated(), self.output, backup=True)
         sys.stdout.write(" OK\n")
         sys.stdout.flush()
       else: 
         sys.stdout.write('\n')
         sys.stdout.flush()
-        file_save(self.annotations, sys.stdout)
+        file_save(self.zoom_compensated(), sys.stdout)
         sys.stdout.flush()
       
       self.unsaved = False
