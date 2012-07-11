@@ -20,7 +20,10 @@ Available key bindings:
 1,2,3,4...g: place keypoint under cursor
 h, <Left>: rewind N frames
 l, <Right>: forward N frames
-  
+S: Saves current annotations
+Q: Quits the application, saving annotations if required
+<Escape>: Quits the application, does not save anything, even if required
+
   Note: "N" is the "skip factor" as defined by the command line parameter.
   Note: Use <Shift> to move in single frame steps.
 
@@ -121,6 +124,7 @@ class AnnotatorApp(tkinter.Tk):
     self.skip_factor = skip_factor
     self.immediate_keys = '1234567890abcdefg' #max of 17 points
     self.output = output
+    self.unsaved = False #if we have data that needs saving
 
     # load existing annotations if any
     if input:
@@ -169,27 +173,51 @@ class AnnotatorApp(tkinter.Tk):
 
     # Capture closing the app -> use to save the file
     self.protocol("WM_DELETE_WINDOW", self.on_quit)
+    self.bind("Q", self.on_quit)
+    self.bind("<Escape>", self.on_quit_no_saving)
+    self.bind("S", self.save)
 
-  def on_quit(self):
-    """On quit we either dump the output to screen or to a file."""
+  def save(self, *args, **kwargs):
+    """Action executed when the user explicitly asks us to save the file"""
 
-    from .. import save
+    from .. import save as file_save
 
-    if self.annotations:
+    if (self.unsaved and self.annotations) or \
+        not isinstance(self.output, (str,unicode)):
 
       if self.output: 
-        sys.stdout("Writing annotations to '%s'..." % self.output)
+        sys.stdout.write("Writing annotations to '%s'..." % self.output)
         sys.stdout.flush()
-        save(self.annotations, self.output, backup=True)
-        sys.stdout.write(" OK")
+        file_save(self.annotations, self.output, backup=True)
+        sys.stdout.write(" OK\n")
         sys.stdout.flush()
       else: 
         sys.stdout.write('\n')
         sys.stdout.flush()
-        save(self.annotations, sys.stdout)
+        file_save(self.annotations, sys.stdout)
         sys.stdout.flush()
+      
+      self.unsaved = False
+
+    else:
+
+      sys.stdout.write("Saving to '%s' (skipped): unchanged\n" % self.output)
+      sys.stdout.flush()
+      
+  def on_quit_no_saving(self, *args, **kwargs):
+    """On quit we either dump the output to screen or to a file."""
+
+    if self.unsaved and self.annotations:
+      sys.stdout.write("Warning: lost annotations\n")
+      sys.stdout.flush()
 
     self.destroy()
+
+  def on_quit(self, *args, **kwargs):
+    """On quit we either dump the output to screen or to a file."""
+
+    self.save(*args, **kwargs)
+    self.on_quit_no_saving(*args, **kwargs)
 
   def on_help(self, event):
     """Creates a help dialog box with the currently enabled commands"""
@@ -235,6 +263,8 @@ class AnnotatorApp(tkinter.Tk):
     else:
       # otherwise, just save the one that moved
       self.annotations[self.curr_frame][kpindex] = (event.x, event.y)
+
+    self.unsaved = True
 
   def set_keypoint_focus(self, event):
     """Sets the focus on the first keypoint in the canvas"""
@@ -283,6 +313,8 @@ class AnnotatorApp(tkinter.Tk):
     else:
       # otherwise, just save the one that moved
       self.annotations[self.curr_frame][self.curr_focus] = (kpx + dx, kpy + dy)
+
+    self.unsaved = True
 
   def on_move(self, event):
     """What happens when one of the arrow keys is pressed"""
@@ -404,6 +436,8 @@ class AnnotatorApp(tkinter.Tk):
     else:
       # otherwise, just save the one that moved
       self.annotations[self.curr_frame][kpindex] = (event.x, event.y)
+
+    self.unsaved = True
 
   def add_drag_n_drop(self):
     """Add bindings for clicking, dragging and releasing over any object with
