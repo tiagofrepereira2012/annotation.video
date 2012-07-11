@@ -20,7 +20,8 @@ Available key bindings:
 1,2,3,4...g: place keypoint under cursor
 h, <Left>: rewind N frames
 l, <Right>: forward N frames
-S: Saves current annotations
+D: Delete annotations for the current frame
+S: Saves or dumps current annotations
 Q: Quits the application, saving annotations if required
 <Escape>: Quits the application, does not save anything, even if required
 
@@ -138,10 +139,10 @@ class AnnotatorApp(tkinter.Tk):
 
     # needs a better configuration for keypoints
     self.keypoint_config = [
-        (self.shape[0]/3, self.shape[1]/3),
-        (self.shape[0]/3+60, self.shape[1]/3),
-        (self.shape[0]/3+150, self.shape[1]/3),
-        (self.shape[0]/3+210, self.shape[1]/3),
+        (self.shape[0]/3, self.shape[1]/3, "OutR"),
+        (self.shape[0]/3+60, self.shape[1]/3, "InR"),
+        (self.shape[0]/3+150, self.shape[1]/3, "InL"),
+        (self.shape[0]/3+210, self.shape[1]/3, "OutL"),
         ]
 
     # creates the image canvas
@@ -176,6 +177,7 @@ class AnnotatorApp(tkinter.Tk):
     self.bind("Q", self.on_quit)
     self.bind("<Escape>", self.on_quit_no_saving)
     self.bind("S", self.save)
+    self.bind("D", self.on_delete_current_frame_annotations)
 
   def save(self, *args, **kwargs):
     """Action executed when the user explicitly asks us to save the file"""
@@ -207,7 +209,8 @@ class AnnotatorApp(tkinter.Tk):
   def on_quit_no_saving(self, *args, **kwargs):
     """On quit we either dump the output to screen or to a file."""
 
-    if self.unsaved and self.annotations:
+    if self.unsaved and self.annotations and \
+        isinstance(self.output, (str,unicode)):
       sys.stdout.write("Warning: lost annotations\n")
       sys.stdout.flush()
 
@@ -218,6 +221,13 @@ class AnnotatorApp(tkinter.Tk):
 
     self.save(*args, **kwargs)
     self.on_quit_no_saving(*args, **kwargs)
+
+  def on_delete_current_frame_annotations(self, event):
+    """Delete current frame annotations and reset the view"""
+
+    if self.annotations.has_key(self.curr_frame):
+      del self.annotations[self.curr_frame]
+      self.update_image()
 
   def on_help(self, event):
     """Creates a help dialog box with the currently enabled commands"""
@@ -250,7 +260,8 @@ class AnnotatorApp(tkinter.Tk):
     # move the object the appropriate amount
     kpindex = self.immediate_keys.index(event.char)
     kpx, kpy, kpitem = self.keypoints[kpindex]
-    self.canvas.move(kpitem, event.x - kpx, event.y - kpy)
+    for obj in [item for sublist in kpitem for item in sublist]: 
+      self.canvas.move(obj, event.x - kpx, event.y - kpy)
     self.keypoints[kpindex][0] = event.x
     self.keypoints[kpindex][1] = event.y
 
@@ -265,26 +276,60 @@ class AnnotatorApp(tkinter.Tk):
       self.annotations[self.curr_frame][kpindex] = (event.x, event.y)
 
     self.unsaved = True
+    self.update_status_bar()
 
   def set_keypoint_focus(self, event):
     """Sets the focus on the first keypoint in the canvas"""
 
     if self.curr_focus is None:
       self.curr_focus = 0
-      self.canvas.itemconfig(self.keypoints[self.curr_focus][2],
-          fill=COLOR_ACTIVE)
+      for obj in self.keypoints[self.curr_focus][2][0]:
+        self.canvas.itemconfig(obj, fill=COLOR_ACTIVE)
       self.text_status.set('[focus] set on keypoint %d' % (self.curr_focus+1,))
     else:
       self.curr_focus += 1
       if self.curr_focus >= len(self.keypoints):
         # reset, focus back to main window
-        self.canvas.itemconfig(self.keypoints[-1][2], fill=COLOR_INACTIVE)
+        for obj in self.keypoints[-1][2][0]:
+          self.canvas.itemconfig(obj, fill=COLOR_INACTIVE)
         self.text_status.set('[focus] set back on main window')
         self.curr_focus = None
       else:
-        self.canvas.itemconfig(self.keypoints[self.curr_focus-1][2], fill=COLOR_INACTIVE)
-        self.canvas.itemconfig(self.keypoints[self.curr_focus][2], fill=COLOR_ACTIVE)
+        for obj in self.keypoints[self.curr_focus-1][2][0]:
+          self.canvas.itemconfig(obj, fill=COLOR_INACTIVE)
+        for obj in self.keypoints[self.curr_focus][2][0]:
+          self.canvas.itemconfig(obj, fill=COLOR_ACTIVE)
         self.text_status.set('[focus] set on keypoint %d' % (self.curr_focus+1,))
+
+  def on_quick_keypoint_fix(self, event):
+    """Sets the closest keypoint to the mouse location"""
+
+    def find_closest(x, y):
+      """My own implementation to find the closest keypoint to the location
+      clicked by the user."""
+      dist = [numpy.linalg.norm((x-k[0],y-k[1])) for k in self.keypoints]
+      return min(enumerate(dist), key=itemgetter(1))[0]
+   
+    # move the object the appropriate amount
+    kpindex = find_closest(event.x, event.y)
+    kpx, kpy, kpitem = self.keypoints[kpindex]
+    for obj in [item for sublist in kpitem for item in sublist]: 
+      self.canvas.move(obj, event.x - kpx, event.y - kpy)
+    self.keypoints[kpindex][0] = event.x
+    self.keypoints[kpindex][1] = event.y
+
+    # record the point the marking was dropped in the annotations
+    if not self.annotations.has_key(self.curr_frame):
+      # if it is the first time, save all points
+      self.annotations[self.curr_frame] = \
+          [[k[0],k[1]] for k in self.keypoints]
+
+    else:
+      # otherwise, just save the one that moved
+      self.annotations[self.curr_frame][kpindex] = (event.x, event.y)
+
+    self.unsaved = True
+    self.update_status_bar()
 
   def move_focused_keypoint(self, event):
     """Moves a focused keypoint"""
@@ -299,7 +344,8 @@ class AnnotatorApp(tkinter.Tk):
     
     if event.state & SHIFT: dx /= self.skip_factor; dy /= self.skip_factor
 
-    self.canvas.move(kpitem, dx, dy)
+    for obj in [item for sublist in kpitem for item in sublist]: 
+      self.canvas.move(obj, dx, dy)
 
     self.keypoints[self.curr_focus][0] = kpx + dx
     self.keypoints[self.curr_focus][1] = kpy + dy
@@ -315,6 +361,7 @@ class AnnotatorApp(tkinter.Tk):
       self.annotations[self.curr_frame][self.curr_focus] = (kpx + dx, kpy + dy)
 
     self.unsaved = True
+    self.update_status_bar()
 
   def on_move(self, event):
     """What happens when one of the arrow keys is pressed"""
@@ -374,10 +421,15 @@ class AnnotatorApp(tkinter.Tk):
         use_frame -= 1
     self.show_keypoints(use_annotation)
 
+    self.update_status_bar()
+
+  def update_status_bar(self):
+
     # updates the status bar
-    annotated = ''
+    annotated = '(previous state)'
+    if not self.annotations: annotated = '(no annotations)'
     if self.annotations.has_key(self.curr_frame): annotated = ' (annotated)'
-    self.text_status.set('[goto] frame %03d/%03d %s' % (self.curr_frame+1, 
+    self.text_status.set('[status] frame %03d/%03d %s' % (self.curr_frame+1, 
       len(self.video), annotated))
 
   def on_keypoint_button_press(self, event):
@@ -400,15 +452,16 @@ class AnnotatorApp(tkinter.Tk):
     # keypoint position in the list of keypoints.
     self.dragged = [event.x, event.y, index]
 
-    self.canvas.itemconfig(self.keypoints[index][2], fill=COLOR_ACTIVE)
+    for obj in self.keypoints[index][2][0]:
+      self.canvas.itemconfig(obj, fill=COLOR_ACTIVE)
 
   def on_keypoint_button_release(self, event):
     """What happens when the user releases a key point
     
-    Re-paint the current keypoint in COLOR_INACTIVE. 
+    Re-paint the current keypoint in COLOR_INACTIVE.
     """
-    self.canvas.itemconfig(self.keypoints[self.dragged[2]][2], 
-        fill=COLOR_INACTIVE)
+    for obj in self.keypoints[self.dragged[2]][2][0]:
+      self.canvas.itemconfig(obj, fill=COLOR_INACTIVE)
     self.dragged = [0, 0, None]
 
   def on_keypoint_motion(self, event):
@@ -422,8 +475,9 @@ class AnnotatorApp(tkinter.Tk):
     # move the object the appropriate amount
     kpindex = self.dragged[2]
     kpx, kpy, kpitem = self.keypoints[kpindex]
-    self.canvas.move(kpitem, event.x - self.dragged[0],
-        event.y - self.dragged[1])
+    for obj in [item for sublist in kpitem for item in sublist]: 
+      self.canvas.move(obj, event.x - self.dragged[0], event.y -
+          self.dragged[1])
     self.dragged[0] = self.keypoints[kpindex][0] = event.x
     self.dragged[1] = self.keypoints[kpindex][1] = event.y
 
@@ -438,6 +492,7 @@ class AnnotatorApp(tkinter.Tk):
       self.annotations[self.curr_frame][kpindex] = (event.x, event.y)
 
     self.unsaved = True
+    self.update_status_bar()
 
   def add_drag_n_drop(self):
     """Add bindings for clicking, dragging and releasing over any object with
@@ -449,13 +504,14 @@ class AnnotatorApp(tkinter.Tk):
         self.on_keypoint_button_release)
     self.canvas.tag_bind("keypoint", "<B1-Motion>",
         self.on_keypoint_motion)
+    self.canvas.bind("<ButtonPress-1>", self.on_quick_keypoint_fix)
 
   def create_keypoints(self):
     """Creates the keypoints and draw them to the screen, hiding their
     locations"""
 
-    def cross(canvas, x, y, w):
-      """Defines a cross in terms of a center and a radius"""
+    def cross(canvas, x, y, w, text):
+      """Defines a cross + number in terms of a center and a radius"""
 
       #points = (x, y-r, x, y+r, x, y, x-r, y, x+r, y, x, y)
       w3 = 3*w; 
@@ -473,14 +529,30 @@ class AnnotatorApp(tkinter.Tk):
           x-w3, y-w,
           x-w, y-w,
           )
-      return canvas.create_polygon(points, outline='black',
-          fill=COLOR_INACTIVE, tags="keypoint", width=1.0, 
+
+      # text - not modifiable for the color
+      t = canvas.create_text((x-w3, y-w3), anchor=tkinter.SE,
+          fill='black', tags="keypoint", state=tkinter.NORMAL,
+          justify=tkinter.RIGHT, text=text)
+
+      bbox = canvas.bbox(t)
+      canvas.itemconfig(t, state=tkinter.HIDDEN)
+
+      # background drop shadow
+      s = canvas.create_rectangle(bbox, fill=COLOR_INACTIVE, tags="keypoint",
           state=tkinter.HIDDEN)
+      # text on the top of the drop shadow
+      canvas.tag_raise(t)
+
+      poly = canvas.create_polygon(points, outline='black',
+          fill=COLOR_INACTIVE, tags="keypoint", width=1.0, state=tkinter.HIDDEN)
+
+      return ((poly,s),(t,)) # tuple 1: modifiable; tuple 2: non-modifiable
 
     self.keypoints = []
 
-    for (x, y) in self.keypoint_config:
-      self.keypoints.append([x, y, cross(self.canvas, x, y, self.radius)])
+    for i, (x, y, l) in enumerate(self.keypoint_config):
+      self.keypoints.append([x, y, cross(self.canvas, x, y, self.radius, l)])
 
   def show_keypoints(self, annotations):
     """Shows keypoints acording to existing annotations"""
@@ -488,10 +560,13 @@ class AnnotatorApp(tkinter.Tk):
     if self.keypoints is None: self.create_keypoints()
     if annotations is None: annotations = self.keypoint_config #default
     for i, k in enumerate(self.keypoints):
-      self.canvas.move(k[2], annotations[i][0]-k[0], annotations[i][1]-k[1])
+      for obj in [item for sublist in k[2] for item in sublist]:
+        self.canvas.move(obj, annotations[i][0]-k[0], annotations[i][1]-k[1])
       k[0] = annotations[i][0]
       k[1] = annotations[i][1]
-    for k in self.keypoints: self.canvas.itemconfig(k[2], state=tkinter.NORMAL)
+    for k in self.keypoints:
+      for obj in [item for sublist in k[2] for item in sublist]:
+        self.canvas.itemconfig(obj, state=tkinter.NORMAL)
  
 def process_arguments():
 
