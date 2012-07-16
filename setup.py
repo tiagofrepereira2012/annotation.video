@@ -9,10 +9,10 @@ from setuptools import setup, find_packages
 # parameters that define our package.
 setup(
 
-    name='annotation',
+    name='annotation.video',
     version='1.0',
     description='Annotation tool for video streams',
-    url='http://github.com/bioidiap/annotation',
+    url='http://github.com/bioidiap/annotation.video',
     license='LICENSE.txt',
     author_email='Andre Anjos <andre.anjos@idiap.ch>',
     #long_description=open('doc/howto.rst').read(),

@@ -1,9 +1,7 @@
 Video Key Point Annotation Tool
 ===============================
 
-.. todo::
-
-  Write intro
+A small TkInter-based keypoint annotation tool for videos written in Python.
 
 Installation
 ------------
@@ -12,7 +10,7 @@ To follow these instructions locally you will need a local copy of this
 package. Start by cloning this project with something like (shell commands are
 marked with a ``$`` signal)::
 
-  $ git clone --depth=1 https://github.com/bioidiap/annotation.git
+  $ git clone --depth=1 https://github.com/bioidiap/annotation.video.git
   $ cd annotation
   $ rm -rf .git # you don't need the git directories...
 
@@ -48,10 +46,3 @@ get you a fully operational test and development environment.
 Usage
 -----
 
-Please refer to the documentation inside the ``doc`` directory of this package
-for further instructions on the functionality available.
-
-Reference
----------
-
-If you need to cite this work, please contact us.
