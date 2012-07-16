@@ -11,7 +11,7 @@ setup(
 
     name='annotation.video',
     version='1.0',
-    description='Annotation tool for video streams',
+    description='A TkInter-based keypoint annotation tool for video streams',
     url='http://github.com/bioidiap/annotation.video',
     license='LICENSE.txt',
     author_email='Andre Anjos <andre.anjos@idiap.ch>',
@@ -28,8 +28,8 @@ setup(
 
     entry_points={
       'console_scripts': [
-        'annotate = annotation.script.annotate:main',
-        'play = annotation.script.play:main',
+        'annotate = annotation.video.script.annotate:main',
+        #'play = annotation.video.script.play:main',
         ],
       },
 
