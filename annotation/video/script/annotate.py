@@ -586,7 +586,8 @@ def process_arguments():
 
   import argparse
 
-  parser = argparse.ArgumentParser(description=__doc__)
+  parser = argparse.ArgumentParser(description=__doc__,
+      formatter_class=argparse.RawDescriptionHelpFormatter)
 
   parser.add_argument('video', metavar='VIDEO', type=str,
       help="Video file to load")
@@ -597,7 +598,7 @@ def process_arguments():
 
   parser.add_argument('-d', '--annotation-radius', dest='radius',
       metavar='N', type=int, default=2, 
-      help="Diameter of annotations (defaults to %(default)s)")
+      help="Diameter of visual keypoints while annotating (defaults to %(default)s)")
 
   parser.add_argument('-s', '--skip-factor', dest='skip_factor',
       metavar='N', type=int, default=5,
