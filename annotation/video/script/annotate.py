@@ -164,7 +164,7 @@ class AnnotatorApp(tkinter.Tk):
     self.video = video
     self.zoom = zoom
     self.radius = radius
-    self.shape = (zoom*video[0].size[0], zoom*video[0].size[1])
+    self.shape = (zoom*video.shape[2], zoom*video.shape[1])
     self.curr_frame = 0
     self.skip_factor = skip_factor
     self.immediate_keys = '1234567890abcdefg' #max of 17 points
@@ -632,6 +632,9 @@ def process_arguments():
   parser.add_argument('config', metavar='FILE', type=str,
       help="Base keypoint/input configuration. You should provide an annotation file with at least one annotation that can be used as the keypoint configuration.")
 
+  parser.add_argument('-c', '--cache', dest='cache', metavar='INT',
+      type=int, default=0, help="Number of frames to cache in a video stream (defaults to %(default)s; a value smaller or equal to zero disables the cache)")
+
   parser.add_argument('-z', '--zoom', dest='zoom', metavar='N',
       type=int, default=3,
       help="Zoom in by the given factor (defaults to %(default)s)")
@@ -677,21 +680,6 @@ def process_arguments():
 
   return args
 
-def load_video(filename):
-  """Transforms the input numpy ndarray sequence into something more suitable
-  for TkInter interaction"""
-
-  import bob
-
-  retval = []
-  reader = bob.io.VideoReader(filename)
-  for frame in reader: 
-    sys.stdout.write('.')
-    sys.stdout.flush()
-    retval.append(Image.merge('RGB', [Image.fromarray(frame[k]) for k in range(3)]))
-
-  return retval
-
 def check_config(data, shape):
   """Checks the configuration for inconsistencies w.r.t. the input video
   shape."""
@@ -723,16 +711,19 @@ def load_config(filename, shape):
 
 def main():
 
+  from ..cache import Video
+
   args = process_arguments()
  
-  sys.stdout.write("Loading input at '%s'..." % (args.video,))
+  sys.stdout.write("Loading input video from '%s' (cache=%d)..." % \
+      (args.video, args.cache))
   sys.stdout.flush()
-  v = load_video(args.video)
+  v = Video(args.video, N=args.cache)
 
   sys.stdout.write("OK!\nLoading keypoint configuration at '%s'..." % \
       (args.config,))
   sys.stdout.flush()
-  config, input = load_config(args.config, (len(v), v[0].size[1], v[0].size[0]))
+  config, input = load_config(args.config, v.shape)
 
   sys.stdout.write(" OK!\nLaunching annotation interface...\n")
   sys.stdout.flush()
