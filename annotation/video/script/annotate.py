@@ -703,29 +703,11 @@ def check_config(data, shape):
     if y >= shape[1]:
       raise RuntimeError, 'Keypoint configuration "%s" has an "y" value (%d) greater or equal the video height (%d)' % (l, y, shape[1])
 
-def check_input(data, config, shape):
-  """Checks the input data for inconsistencies w.r.t. the input video
-  shape."""
-
-  # checks that the overall length is OK
-  if max(data.keys()) >= shape[0]:
-    raise RuntimeError, 'Input data has too many frames - detected index = %d, but input video has only %d frames' % (max(data.keys()), shape[0])
-
-  # checks that each individual keypoint is OK
-  for frame in sorted(data.keys()):
-
-    for i, (x,y) in enumerate(data[frame]):
-
-      if x >= shape[2]:
-        raise RuntimeError, 'Input data at frame %d for keypoint "%s" has an "x" value (%d) greater or equal the video width (%d)' % (frame, config[i][2], x, shape[2])
-      if y >= shape[1]:
-        raise RuntimeError, 'Input data at frame %d for keypoint "%s" has an "y" value (%d) greater or equal the video height (%d)' % (frame, config[i][2], y, shape[1])
-
 def load_config(filename, shape):
   """Loads the keypoint configuration/input file, checks the input shape for
   problems."""
 
-  from ...io import load
+  from ...io import load, check_input
 
   data, header = load(filename)
 
@@ -735,7 +717,7 @@ def load_config(filename, shape):
   config = [(x,y,l) for ((x,y),l) in zip(data[min(data.keys())], header)]
 
   check_config(config, shape)
-  check_input(data, config, shape)
+  check_input(data, header, shape)
 
   return config, data
 

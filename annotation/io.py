@@ -56,6 +56,36 @@ def save(data, fp, header=None, backup=False, fs=" "):
 
     fp.write(rs)
 
+def check_input(data, header, shape):
+  """Checks the input data for inconsistencies w.r.t. the input video
+  shape.
+  
+  Parameters
+
+  data
+    The input data, as read by load()
+
+  header
+    The header tags
+
+  shape
+    The input video shape in the format (no_frames, height, width)
+  """
+
+  # checks that the overall length is OK
+  if max(data.keys()) >= shape[0]:
+    raise RuntimeError, 'Input data has too many frames - detected index = %d, but input video has only %d frames' % (max(data.keys()), shape[0])
+
+  # checks that each individual keypoint is OK
+  for frame in sorted(data.keys()):
+
+    for i, (x,y) in enumerate(data[frame]):
+
+      if x >= shape[2]:
+        raise RuntimeError, 'Input data at frame %d for keypoint "%s" has an "x" value (%d) greater or equal the video width (%d)' % (frame, header[i], x, shape[2])
+      if y >= shape[1]:
+        raise RuntimeError, 'Input data at frame %d for keypoint "%s" has an "y" value (%d) greater or equal the video height (%d)' % (frame, header[i], y, shape[1])
+
 def load(fp, fs=" "):
   """Loads a given data set from a file, returning a dictionary with annotations
 
@@ -90,16 +120,17 @@ def load(fp, fs=" "):
   for i, entry in enumerate(r):
     data[int(entry[0])] = zip([int(k) for k in entry[1::2]],
         [int(k) for k in entry[2::2]])
-    if i == 0: 
+    skeys = sorted(data.iterkeys())
+    if i == 0:
       if header is not None:
         # check data[0] against header
-        if len(data[i]) != len(header):
-          raise RuntimeError, "row 0 has different length (%d) than header (%d)" % (len(data[i]), len(header))
+        if len(data[skeys[i]]) != len(header):
+          raise RuntimeError, "row 0 has different length (%d) than header (%d)" % (len(data[skeys[i]]), len(header))
       continue
     else:
       # checks data[i] against data[i-1]
-      if len(data[i]) != len(data[i-1]):
-        raise RuntimeError, "row %d has different length (%d) than its predecessor (%d)" % (i, len(data[i]), len(data[i-1]))
+      if len(data[skeys[i]]) != len(data[skeys[i-1]]):
+        raise RuntimeError, "row %d has different length (%d) than its predecessor (%d)" % (i, len(data[skeys[i]]), len(data[skeys[i-1]]))
 
   if header is None: 
     header = [str(k) for k in range(len(data[min(data.keys())]))]
