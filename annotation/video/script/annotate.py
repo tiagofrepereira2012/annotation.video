@@ -11,37 +11,81 @@ modify such keypoints either with the mouse, keyboard, or a combination of
 both. Once the user modifies the location of one of the keypoints, the
 annotations for the given frame are permanently recorded. Frames in which the
 user has not modified the keypoints on do not get annotations recorded.
+
+Annotation format
+-----------------
+
+The annotation file is composed of an (optional) header followed by rows with
+the frame number and `x` and `y` point coordinates. Numbers are all 0-based.
+The first frame of a video sequence is numbered 0, as well as the first row or
+column of a frame. The record (number) separator is a space and the field (row)
+separator is a new-line character. The resulting file can be read and parsed by
+most CSV parsers available freely on the internet. 
+
+If a header line is available, it should have length equal to (N-1)/2 where N 
+is the number of entries in a non-header line.
+
+Here is a 4-point annotation example::
+
+  OutR InR InL OutL
+  0 130 87 146 86 171 86 186 86
         
-Available key bindings:
+Available key bindings
+----------------------
 
-[Default mode]
+Default mode
+============
 
-?: this help message
-1,2,3,4...g: place keypoint under cursor
-h, <Left>: rewind N frames
-l, <Right>: forward N frames
-D: Delete annotations for the current frame
-S: Saves or dumps current annotations
-Q: Quits the application, saving annotations if required
-<Escape>: Quits the application, does not save anything, even if required
+  ?
+    this help message
+  1,2,3,4...g
+    place keypoint under cursor
+  h, <Left>
+    rewind N frames
+  l, <Right>
+    forward N frames
+  D
+    Delete annotations for the current frame
+  S
+    Saves or dumps current annotations
+  Q
+    Quits the application, saving annotations if required
+  <Escape>
+    Quits the application, does not save anything, even if required
 
-  Note: "N" is the "skip factor" as defined by the command line parameter.
-  Note: Use <Shift> to move in single frame steps.
+.. note::
 
-[Keypoint placement mode]
+  "N" is the "skip factor" as defined by the command line parameter.
 
-  Note: Use <Space> to switch focus to the next keypoint (highlighted). This
-        effectively alternates between the "Default" and "Keypoint placement"
-        modes.
+.. note::
 
-h, <Left>: move cursor left N pixels
-l, <Right>: move cursor right N pixels
-j, <Down>: move cursor down N pixels
-k, <Up>: move cursor up N pixels
-<Escape>: go back to default mode
+  Use <Shift> to move in single frame steps.
+
+Keypoint placement mode
+=======================
+
+Use <Space> to switch focus to the next keypoint (highlighted). This
+effectively alternates between the "Default" and "Keypoint placement" modes.
+
+  h, <Left>
+    move cursor left N pixels
+  l, <Right>
+    move cursor right N pixels
+  j, <Down>
+    move cursor down N pixels
+  k, <Up>
+    move cursor up N pixels
+  <Escape>
+    go back to default mode
   
-  Note: "N" is the "skip factor" as defined by the command line parameter
-  Note: Use <Shift> to move in single pixel steps"""
+.. note::
+
+  "N" is the "skip factor" as defined by the command line parameter
+  
+.. note::
+  
+  Use <Shift> to move in single pixel steps
+"""
 
 import os
 import sys
@@ -110,7 +154,7 @@ class HelpDialog(tkinter.Toplevel):
 class AnnotatorApp(tkinter.Tk):
   """A wrapper for the annotation application"""
   
-  def __init__(self, video, zoom, radius, skip_factor, input, 
+  def __init__(self, video, zoom, radius, skip_factor, config, input, 
       output, *args, **kwargs):
 
     tkinter.Tk.__init__(self, *args, **kwargs)
@@ -126,24 +170,14 @@ class AnnotatorApp(tkinter.Tk):
     self.immediate_keys = '1234567890abcdefg' #max of 17 points
     self.output = output
     self.unsaved = False #if we have data that needs saving
+    self.keypoint_config = config
+    self.annotations = input
 
-    # load existing annotations if any
-    if input:
-      from .. import load
-      sys.stdout.write("Loading existing annotations from '%s'..." % input)
-      self.annotations = load(input)
-      sys.stdout.write(" OK\n")
-      sys.stdout.flush()
-    else:
-      self.annotations = {}
-
-    # needs a better configuration for keypoints
-    self.keypoint_config = [
-        (self.shape[0]/3, self.shape[1]/3, "OutR"),
-        (self.shape[0]/3+60, self.shape[1]/3, "InR"),
-        (self.shape[0]/3+150, self.shape[1]/3, "InL"),
-        (self.shape[0]/3+210, self.shape[1]/3, "OutL"),
-        ]
+    if self.zoom != 1:
+      # zoom correction
+      self.keypoint_config = [(zoom*x,zoom*y,l) for (x,y,l) in config]
+      for k in self.annotations.iterkeys(): 
+        self.annotations[k] = [(zoom*x,zoom*y) for (x,y) in self.annotations[k]]
 
     # creates the image canvas
     self.canvas = tkinter.Canvas(self, width=self.shape[0], height=self.shape[1])
@@ -196,21 +230,24 @@ class AnnotatorApp(tkinter.Tk):
   def save(self, *args, **kwargs):
     """Action executed when the user explicitly asks us to save the file"""
 
-    from .. import save as file_save
+    from ...io import save as file_save
 
     if (self.unsaved and self.annotations) or \
         not isinstance(self.output, (str,unicode)):
 
+      header = [l for (x,y,l) in self.keypoint_config]
+
       if self.output: 
         sys.stdout.write("Writing annotations to '%s'..." % self.output)
         sys.stdout.flush()
-        file_save(self.zoom_compensated(), self.output, backup=True)
+        file_save(self.zoom_compensated(), self.output, header=header,
+            backup=True)
         sys.stdout.write(" OK\n")
         sys.stdout.flush()
       else: 
         sys.stdout.write('\n')
         sys.stdout.flush()
-        file_save(self.zoom_compensated(), sys.stdout)
+        file_save(self.zoom_compensated(), sys.stdout, header=header)
         sys.stdout.flush()
       
       self.unsaved = False
@@ -592,6 +629,9 @@ def process_arguments():
   parser.add_argument('video', metavar='VIDEO', type=str,
       help="Video file to load")
 
+  parser.add_argument('config', metavar='FILE', type=str,
+      help="Base keypoint/input configuration. You should provide an annotation file with at least one annotation that can be used as the keypoint configuration.")
+
   parser.add_argument('-z', '--zoom', dest='zoom', metavar='N',
       type=int, default=3,
       help="Zoom in by the given factor (defaults to %(default)s)")
@@ -603,10 +643,6 @@ def process_arguments():
   parser.add_argument('-s', '--skip-factor', dest='skip_factor',
       metavar='N', type=int, default=5,
       help="Default skip factor for frame and point seeking (if you press SHIFT together with motion keys, we still only move 1 frame/point each time; defaults to %(default)s)")
-
-  parser.add_argument('-i', '--input', dest='input',
-      metavar='FILE', type=str, default=None,
-      help="Input file that will be used to preload annotations for the given video")
 
   parser.add_argument('-o', '--output', dest='output',
       metavar='FILE', type=str, default=None,
@@ -626,9 +662,9 @@ def process_arguments():
   if args.skip_factor <= 0:
     parser.error("Cannot use a skip factor <= 0")
 
-  if args.input is not None:
-    if not os.path.exists(args.input):
-      parser.error("Input file '%s' cannot be read" % args.input)
+  if not os.path.exists(args.config):
+    parser.error("Input configuration file '%s' cannot be read" %
+        args.config)
 
   if args.output:
     d = os.path.dirname(os.path.realpath(args.output))
@@ -656,19 +692,71 @@ def load_video(filename):
 
   return retval
 
+def check_config(data, shape):
+  """Checks the configuration for inconsistencies w.r.t. the input video
+  shape."""
+
+  for x,y,l in data:
+
+    if x >= shape[2]:
+      raise RuntimeError, 'Keypoint configuration "%s" has an "x" value (%d) greater or equal the video width (%d)' % (l, x, shape[2])
+    if y >= shape[1]:
+      raise RuntimeError, 'Keypoint configuration "%s" has an "y" value (%d) greater or equal the video height (%d)' % (l, y, shape[1])
+
+def check_input(data, config, shape):
+  """Checks the input data for inconsistencies w.r.t. the input video
+  shape."""
+
+  # checks that the overall length is OK
+  if max(data.keys()) >= shape[0]:
+    raise RuntimeError, 'Input data has too many frames - detected index = %d, but input video has only %d frames' % (max(data.keys()), shape[0])
+
+  # checks that each individual keypoint is OK
+  for frame in sorted(data.keys()):
+
+    for i, (x,y) in enumerate(data[frame]):
+
+      if x >= shape[2]:
+        raise RuntimeError, 'Input data at frame %d for keypoint "%s" has an "x" value (%d) greater or equal the video width (%d)' % (frame, config[i][2], x, shape[2])
+      if y >= shape[1]:
+        raise RuntimeError, 'Input data at frame %d for keypoint "%s" has an "y" value (%d) greater or equal the video height (%d)' % (frame, config[i][2], y, shape[1])
+
+def load_config(filename, shape):
+  """Loads the keypoint configuration/input file, checks the input shape for
+  problems."""
+
+  from ...io import load
+
+  data, header = load(filename)
+
+  if not data:
+    raise RuntimeError, 'No keypoints found at %s' % filename
+
+  config = [(x,y,l) for ((x,y),l) in zip(data[min(data.keys())], header)]
+
+  check_config(config, shape)
+  check_input(data, config, shape)
+
+  return config, data
+
 def main():
 
   args = process_arguments()
  
-  sys.stdout.write("Loading input at '%s' " % (args.video,))
+  sys.stdout.write("Loading input at '%s'..." % (args.video,))
   sys.stdout.flush()
   v = load_video(args.video)
+
+  sys.stdout.write("OK!\nLoading keypoint configuration at '%s'..." % \
+      (args.config,))
+  sys.stdout.flush()
+  config, input = load_config(args.config, (len(v), v[0].size[1], v[0].size[0]))
 
   sys.stdout.write(" OK!\nLaunching annotation interface...\n")
   sys.stdout.flush()
 
-  app = AnnotatorApp(v, args.zoom, args.radius, args.skip_factor, args.input,
-      args.output)
+  app = AnnotatorApp(v, args.zoom, args.radius, args.skip_factor, config,
+      input, args.output)
   app.mainloop()
 
 if __name__ == '__main__':

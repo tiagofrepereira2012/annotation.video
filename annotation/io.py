@@ -7,7 +7,7 @@
 
 import os
 
-def save(data, fp, backup=False, fs=" "):
+def save(data, fp, header=None, backup=False, fs=" "):
   """Saves a given data set to a file
   
   Parameters
@@ -18,6 +18,11 @@ def save(data, fp, backup=False, fs=" "):
 
   fp
     The name of a file, with full path, to be used for recording the data or an     already opened file-like object, that accepts the "write()" call.
+
+  header
+    If set, should be a python iterable with the names of each (double) column
+    in the annotation file. In this case, this will be the first entry in the
+    annotation file output.
 
   backup
     If set, backs-up a possibly existing file path before overriding it. Note
@@ -37,8 +42,11 @@ def save(data, fp, backup=False, fs=" "):
     fp = open(fp, 'wt')
 
   frame_tmpl = "%d"
-  coord_tmpl = "%d %d"
+  coord_tmpl = "%d" + fs + "%d"
   rs = '\n'
+
+  if header is not None:
+    fp.write(fs.join(header) + rs)
 
   for key in sorted(data.iterkeys()):
 
@@ -58,18 +66,42 @@ def load(fp, fs=" "):
 
   fs
     The field separator to use. A single space by default.
+
+  Returns the loaded data as a tuple (data, header). If there is no header,
+  then the entry in the output data is set a sequence of numbers (as strings),
+  starting from '0' (e.g. ['0', '1', '2', '3'], for a 4-keypoint
+  configuration).
   """
 
   if isinstance(fp, (str, unicode)): fp = open(fp, 'rt')
 
   import csv
 
-  r = csv.reader(fp, delimiter=fs)
+  # load all file at once
+  r = list(csv.reader(fp, delimiter=fs))
 
-  retval = {}
+  data = {}
+  header = None
 
-  for entry in r:
-    retval[int(entry[0])] = zip([int(k) for k in entry[1::2]], 
+  if len(r[0]) == ((len(r[1])-1)/2):
+    header = r[0]
+    del r[0]
+
+  for i, entry in enumerate(r):
+    data[int(entry[0])] = zip([int(k) for k in entry[1::2]],
         [int(k) for k in entry[2::2]])
+    if i == 0: 
+      if header is not None:
+        # check data[0] against header
+        if len(data[i]) != len(header):
+          raise RuntimeError, "row 0 has different length (%d) than header (%d)" % (len(data[i]), len(header))
+      continue
+    else:
+      # checks data[i] against data[i-1]
+      if len(data[i]) != len(data[i-1]):
+        raise RuntimeError, "row %d has different length (%d) than its predecessor (%d)" % (i, len(data[i]), len(data[i-1]))
 
-  return retval
+  if header is None: 
+    header = [str(k) for k in range(len(data[min(data.keys())]))]
+
+  return (data, header)
