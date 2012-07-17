@@ -29,7 +29,7 @@ setup(
     entry_points={
       'console_scripts': [
         'annotate.py = annotation.video.script.annotate:main',
-        'play.py = annotation.video.script.play:main',
+        'replay.py = annotation.video.script.replay:main',
         ],
       },
 
