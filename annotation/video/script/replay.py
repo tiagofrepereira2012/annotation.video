@@ -59,7 +59,7 @@ def process_arguments():
       metavar='N', type=int, default=4, 
       help="Diameter of visual keypoints while annotating (defaults to %(default)s)")
 
-  algo_choices = ('interpolate', 'expand', 'none')
+  algo_choices = ('none', 'interpolate', 'expand')
   parser.add_argument('-a', '--algorithm', dest='algo',
       type=str, choices=algo_choices, default=algo_choices[0],
       help="Post-processing algorithm for annotations (options are one of '%s'; defaults to '%s')" % ('|'.join(algo_choices), '%(default)s'))
