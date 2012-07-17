@@ -30,6 +30,7 @@ setup(
       'console_scripts': [
         'annotate.py = annotation.video.script.annotate:main',
         'replay.py = annotation.video.script.replay:main',
+        'postproc.py = annotation.video.script.postproc:main',
         ],
       },
 
