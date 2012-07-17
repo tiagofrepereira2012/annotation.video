@@ -73,7 +73,7 @@ configuration set like the one bellow::
 Save these contents at a file named, for instance, ``config.txt``. To start a
 new annotation session, use the ``annotate.py`` program::
 
-  $ bin/annotate.py <video-file> --output=annotations.txt config.txt
+  $ bin/annotate.py --output=annotations.txt example/video.avi example/config.txt
 
 The program will load the video file and display the first frame with the
 annotations as defined on ``config.txt`` preloaded. Read the help message of
@@ -90,12 +90,12 @@ closest one from the past. The following command line will interpolate the
 previous output annotations and generate a new annotation file
 (``interpolated.txt``)::
 
-  $ bin/postproc.py <video-file> annotations.txt interpolated.txt
+  $ bin/postproc.py example/video.avi example/annotations.txt interpolated.txt
 
 The program ``replay.py`` can read the original video and annotation file and
 generate a new video with (yellow) markings on annotated keypoints::
 
-  $ bin/replay.py <video-file> interpolated.txt annotated.avi
+  $ bin/replay.py example/video.avi example/interpolated.txt annotated.avi
 
 You can play with options for all the above cited programs and fine-tune the
 behavior of the annotation procedure to suit your needs.
