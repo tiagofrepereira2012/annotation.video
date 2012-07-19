@@ -651,6 +651,11 @@ def process_arguments():
       metavar='FILE', type=str, default=None,
       help="Output file that will contain the annotations recorded at this session (if not given, dump to stdout; if file exists, a backup is made)")
 
+  from ..version import __version__
+  name = os.path.basename(os.path.splitext(sys.argv[0])[0])
+  parser.add_argument('-V', '--version', action='version',
+      version='Video Keypoint Annotation Tool v%s (%s)' % (__version__, name))
+  
   args = parser.parse_args()
 
   if not os.path.exists(args.video):

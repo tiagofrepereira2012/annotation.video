@@ -52,6 +52,11 @@ def process_arguments():
       type=str, choices=algo_choices, default=algo_choices[0],
       help="Post-processing algorithm for annotations (options are one of '%s'; defaults to '%s')" % ('|'.join(algo_choices), '%(default)s'))
 
+  from ..version import __version__
+  name = os.path.basename(os.path.splitext(sys.argv[0])[0])
+  parser.add_argument('-V', '--version', action='version',
+      version='Video Keypoint Annotation Tool v%s (%s)' % (__version__, name))
+  
   args = parser.parse_args()
 
   args.algo = args.algo.lower()

@@ -31,6 +31,7 @@ setup(
         'annotate.py = annotation.video.script.annotate:main',
         'replay.py = annotation.video.script.replay:main',
         'postproc.py = annotation.video.script.postproc:main',
+        'mktest.py = annotation.video.script.mktest:main',
         ],
       },
 
