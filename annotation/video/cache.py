@@ -25,6 +25,8 @@ class Video(object):
 
     self.video = bob.io.VideoReader(filename)
     self.N = N
+    self.prefix = None
+    self.suffix = None
     
     self.start = 0
     
@@ -49,9 +51,11 @@ class Video(object):
 
     # load if required
     if key >= self.end or key < self.start:
+      if self.prefix is not None: self.prefix()
       self.start = (key-self.N) if (key-self.N) > 0 else 0
       self.end = (key+self.N) if (key+self.N) < len(self.video) else len(self.video)
       self.loaded = [frame_to_pil_image(frame) for frame in self.video[self.start:self.end]]
+      if self.suffix is not None: self.suffix()
 
     # return
     return self.loaded[key-self.start]
@@ -59,3 +63,7 @@ class Video(object):
   def __len__(self):
 
     return len(self.video)
+
+  def on_cache_load(self, prefix=None, suffix=None):
+    self.prefix = prefix
+    self.suffix = suffix

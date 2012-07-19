@@ -86,6 +86,9 @@ effectively alternates between the "Default" and "Keypoint placement" modes.
   
   Use <Shift> to move in single pixel steps
 
+If you use the left <Control> key, you can move all keypoints at once. Use the
+same combination of keys for moving individual single points.
+
 Mouse
 =====
 
@@ -156,6 +159,47 @@ class HelpDialog(tkinter.Toplevel):
     self.parent.focus_set()
     self.destroy()
 
+class BusyManager:
+
+  def __init__(self, widget):
+    self.toplevel = widget.winfo_toplevel()
+    self.widgets = {}
+
+  def busy(self, widget=None):
+
+    # attach busy cursor to toplevel, plus all windows
+    # that define their own cursor.
+
+    if widget is None:
+      w = self.toplevel # myself
+    else:
+      w = widget
+
+    if not self.widgets.has_key(str(w)):
+      try:
+          # attach cursor to this widget
+          cursor = w.cget("cursor")
+          if cursor != "watch":
+              self.widgets[str(w)] = (w, cursor)
+              w.config(cursor="watch")
+              w.update_idletasks()
+      except TclError:
+          pass
+
+    for w in w.children.values():
+      self.busy(w)
+
+  def notbusy(self):
+
+    # restore cursors
+    for w, cursor in self.widgets.values():
+        try:
+            w.config(cursor=cursor)
+            w.update_idletasks()
+        except TclError:
+            pass
+    self.widgets = {}
+
 class AnnotatorApp(tkinter.Tk):
   """A wrapper for the annotation application"""
   
@@ -167,6 +211,7 @@ class AnnotatorApp(tkinter.Tk):
  
     # holds a pointer to the video object being displayed
     self.video = video
+    self.video.on_cache_load(self.on_cache_load, self.on_cache_loaded)
     self.zoom = zoom
     self.radius = radius
     self.shape = (int(round(zoom*video.shape[2])), 
@@ -178,6 +223,7 @@ class AnnotatorApp(tkinter.Tk):
     self.unsaved = False #if we have data that needs saving
     self.keypoint_config = config
     self.annotations = input
+    self.busyman = BusyManager(self)
 
     if self.zoom != 1:
       # zoom correction
@@ -218,6 +264,21 @@ class AnnotatorApp(tkinter.Tk):
     self.bind("<Escape>", self.on_quit_no_saving)
     self.bind("S", self.save)
     self.bind("D", self.on_delete_current_frame_annotations)
+
+  def on_cache_load(self):
+    """Method called when the video cache is operating"""
+    self.label_status.config(background='red', foreground='white')
+    self.text_status.set('[cache] reloading...')
+    self.label_status.update_idletasks()
+    self.busyman.busy()
+
+  def on_cache_loaded(self):
+    """Method called when the video cache finished loading"""
+    self.label_status.config(background=self.cget('background'), 
+        foreground='black')
+    self.text_status.set('[cache] reloading finished')
+    self.label_status.update_idletasks()
+    self.busyman.notbusy()
 
   def zoom_compensated(self):
     """Returns zoom-compensated annotations"""
@@ -342,21 +403,21 @@ class AnnotatorApp(tkinter.Tk):
 
     if self.curr_focus is None:
       self.curr_focus = 0
-      for obj in self.keypoints[self.curr_focus][2][0]:
+      for obj in (self.keypoints[self.curr_focus][2][0] + self.keypoints[self.curr_focus][2][2]):
         self.canvas.itemconfig(obj, fill=COLOR_ACTIVE)
       self.text_status.set('[focus] set on keypoint %d' % (self.curr_focus+1,))
     else:
       self.curr_focus += 1
       if self.curr_focus >= len(self.keypoints):
         # reset, focus back to main window
-        for obj in self.keypoints[-1][2][0]:
+        for obj in (self.keypoints[-1][2][0] + self.keypoints[-1][2][2]):
           self.canvas.itemconfig(obj, fill=COLOR_INACTIVE)
         self.text_status.set('[focus] set back on main window')
         self.curr_focus = None
       else:
-        for obj in self.keypoints[self.curr_focus-1][2][0]:
+        for obj in (self.keypoints[self.curr_focus-1][2][0] + self.keypoints[self.curr_focus-1][2][2]):
           self.canvas.itemconfig(obj, fill=COLOR_INACTIVE)
-        for obj in self.keypoints[self.curr_focus][2][0]:
+        for obj in (self.keypoints[self.curr_focus][2][0] + self.keypoints[self.curr_focus][2][2]):
           self.canvas.itemconfig(obj, fill=COLOR_ACTIVE)
         self.text_status.set('[focus] set on keypoint %d' % (self.curr_focus+1,))
 
@@ -394,13 +455,15 @@ class AnnotatorApp(tkinter.Tk):
     """Highlights all elements at once"""
 
     for x, y, objects in self.keypoints:
-      for o in objects[0]: self.canvas.itemconfig(o, fill=COLOR_ACTIVE)
+      for o in (objects[0] + objects[2]):
+        self.canvas.itemconfig(o, fill=COLOR_ACTIVE)
 
   def on_unhighlight_all(self, event):
     """Unhighlights all elements at once"""
     
     for x, y, objects in self.keypoints:
-      for o in objects[0]: self.canvas.itemconfig(o, fill=COLOR_INACTIVE)
+      for o in (objects[0] + objects[2]):
+        self.canvas.itemconfig(o, fill=COLOR_INACTIVE)
 
   def on_move_all(self, event):
     """Moves a focused keypoint"""
@@ -475,6 +538,20 @@ class AnnotatorApp(tkinter.Tk):
     else: 
       self.change_frame(event)
 
+  def on_show_labels(self, event):
+    """Shows labels"""
+
+    for x, y, objects in self.keypoints:
+      for o in (objects[2] + objects[3]):
+        self.canvas.itemconfig(o, state=tkinter.NORMAL)
+
+  def on_hide_labels(self, event):
+    """Hide labels"""
+
+    for x, y, objects in self.keypoints:
+      for o in (objects[2] + objects[3]):
+        self.canvas.itemconfig(o, state=tkinter.HIDDEN)
+
   def add_keyboard_bindings(self):
     """Adds mouse bindings to the given widget"""
 
@@ -522,6 +599,10 @@ class AnnotatorApp(tkinter.Tk):
     self.bind("<Control-L>", self.on_move_all)
     self.bind("<Control-K>", self.on_move_all)
     self.bind("<Control-J>", self.on_move_all)
+
+    # show text labels with Alt pressed
+    self.bind("<KeyPress-Alt_L>", self.on_show_labels)
+    self.bind("<KeyRelease-Alt_L>", self.on_hide_labels)
 
     self.bind("?", self.on_help)
 
@@ -579,7 +660,7 @@ class AnnotatorApp(tkinter.Tk):
     # keypoint position in the list of keypoints.
     self.dragged = [event.x, event.y, index]
 
-    for obj in self.keypoints[index][2][0]:
+    for obj in (self.keypoints[index][2][0] + self.keypoints[index][2][2]):
       self.canvas.itemconfig(obj, fill=COLOR_ACTIVE)
 
   def on_keypoint_button_release(self, event):
@@ -587,7 +668,7 @@ class AnnotatorApp(tkinter.Tk):
     
     Re-paint the current keypoint in COLOR_INACTIVE.
     """
-    for obj in self.keypoints[self.dragged[2]][2][0]:
+    for obj in (self.keypoints[self.dragged[2]][2][0] + self.keypoints[self.dragged[2]][2][2]):
       self.canvas.itemconfig(obj, fill=COLOR_INACTIVE)
     self.dragged = [0, 0, None]
 
@@ -676,7 +757,11 @@ class AnnotatorApp(tkinter.Tk):
       poly = canvas.create_polygon(points, outline='black',
           fill=COLOR_INACTIVE, tags="keypoint", width=1.0, state=tkinter.HIDDEN)
 
-      return ((poly,s),(t,)) # tuple 1: modifiable; tuple 2: non-modifiable
+      # [0]: activate-able (not hidden); 
+      # [1]: not activate-able (not hidden);
+      # [2]: activate-able (hidden); 
+      # [3]: not activate-able (hidden);
+      return ((poly,), tuple(), (s,), (t,))
 
     self.keypoints = []
 
@@ -694,7 +779,7 @@ class AnnotatorApp(tkinter.Tk):
       k[0] = annotations[i][0]
       k[1] = annotations[i][1]
     for k in self.keypoints:
-      for obj in [item for sublist in k[2] for item in sublist]:
+      for obj in [item for sublist in k[2][:2] for item in sublist]:
         self.canvas.itemconfig(obj, state=tkinter.NORMAL)
  
 def process_arguments():

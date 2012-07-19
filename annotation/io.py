@@ -116,6 +116,9 @@ def load(fp, fs=" "):
   if len(r[0]) == ((len(r[1])-1)/2):
     header = r[0]
     del r[0]
+  elif len(r[0]) != len(r[1]):
+    print r[0]
+    raise RuntimeError, "row 0 has a different length (%d) from row 1 (%d), but not quite as to make it a header - please verify" % (len(r[0]), len(r[1]))
 
   for i, entry in enumerate(r):
     data[int(entry[0])] = zip([int(k) for k in entry[1::2]],
