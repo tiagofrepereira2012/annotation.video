@@ -85,6 +85,11 @@ effectively alternates between the "Default" and "Keypoint placement" modes.
 .. note::
   
   Use <Shift> to move in single pixel steps
+
+Mouse
+=====
+
+You can use the mouse to either drag-and-drop keypoints or move the closest keypion to the clicked location.
 """
 
 import os
@@ -164,7 +169,8 @@ class AnnotatorApp(tkinter.Tk):
     self.video = video
     self.zoom = zoom
     self.radius = radius
-    self.shape = (zoom*video.shape[2], zoom*video.shape[1])
+    self.shape = (int(round(zoom*video.shape[2])), 
+        int(round(zoom*video.shape[1])))
     self.curr_frame = 0
     self.skip_factor = skip_factor
     self.immediate_keys = '1234567890abcdefg' #max of 17 points
@@ -175,9 +181,9 @@ class AnnotatorApp(tkinter.Tk):
 
     if self.zoom != 1:
       # zoom correction
-      self.keypoint_config = [(zoom*x,zoom*y,l) for (x,y,l) in config]
+      self.keypoint_config = [(int(round(zoom*x)),int(round(zoom*y)),l) for (x,y,l) in config]
       for k in self.annotations.iterkeys(): 
-        self.annotations[k] = [(zoom*x,zoom*y) for (x,y) in self.annotations[k]]
+        self.annotations[k] = [(int(round(zoom*x)),int(round(zoom*y))) for (x,y) in self.annotations[k]]
 
     # creates the image canvas
     self.canvas = tkinter.Canvas(self, width=self.shape[0], height=self.shape[1])
@@ -290,8 +296,10 @@ class AnnotatorApp(tkinter.Tk):
 
     move = 0
 
-    if event.keysym in ('Right', 'l', 'L'): move = self.skip_factor
-    if event.keysym in ('Left', 'h', 'H'): move = -self.skip_factor
+    if event.keysym in ('Right', 'l', 'L') or \
+        event.num in (4,): move = self.skip_factor
+    if event.keysym in ('Left', 'h', 'H') or \
+        event.num in (5,): move = -self.skip_factor
     if event.state & SHIFT: move /= self.skip_factor
 
     self.curr_frame += move
@@ -382,6 +390,51 @@ class AnnotatorApp(tkinter.Tk):
     self.unsaved = True
     self.update_status_bar()
 
+  def on_highlight_all(self, event):
+    """Highlights all elements at once"""
+
+    for x, y, objects in self.keypoints:
+      for o in objects[0]: self.canvas.itemconfig(o, fill=COLOR_ACTIVE)
+
+  def on_unhighlight_all(self, event):
+    """Unhighlights all elements at once"""
+    
+    for x, y, objects in self.keypoints:
+      for o in objects[0]: self.canvas.itemconfig(o, fill=COLOR_INACTIVE)
+
+  def on_move_all(self, event):
+    """Moves a focused keypoint"""
+
+    # calculates the total motion
+    dx, dy = (0, 0)
+    if event.keysym in ('Right', 'l', 'L'): dx = self.skip_factor 
+    elif event.keysym in ('Left', 'h', 'H'): dx = -self.skip_factor
+    elif event.keysym in ('Up', 'k', 'K'): dy = -self.skip_factor
+    elif event.keysym in ('Down', 'j', 'J'): dy = self.skip_factor
+    
+    if event.state & SHIFT: dx /= self.skip_factor; dy /= self.skip_factor
+
+    for i, (kpx, kpy, kpitem) in enumerate(self.keypoints):
+
+      for obj in [item for sublist in kpitem for item in sublist]:
+        self.canvas.move(obj, dx, dy)
+
+      self.keypoints[i][0] = kpx + dx
+      self.keypoints[i][1] = kpy + dy
+
+      # record the point the marking was dropped in the annotations
+      if not self.annotations.has_key(self.curr_frame):
+        # if it is the first time, save all points
+        self.annotations[self.curr_frame] = \
+            [[k[0],k[1]] for k in self.keypoints]
+
+      else:
+        # otherwise, just save the one that moved
+        self.annotations[self.curr_frame][i] = (kpx + dx, kpy + dy)
+
+    self.unsaved = True
+    self.update_status_bar()
+    
   def move_focused_keypoint(self, event):
     """Moves a focused keypoint"""
 
@@ -417,8 +470,10 @@ class AnnotatorApp(tkinter.Tk):
   def on_move(self, event):
     """What happens when one of the arrow keys is pressed"""
 
-    if self.curr_focus is not None: self.move_focused_keypoint(event)
-    else: self.change_frame(event)
+    if self.curr_focus is not None and (event.num not in (4,5)): 
+      self.move_focused_keypoint(event)
+    else: 
+      self.change_frame(event)
 
   def add_keyboard_bindings(self):
     """Adds mouse bindings to the given widget"""
@@ -447,6 +502,27 @@ class AnnotatorApp(tkinter.Tk):
     self.bind("K", self.on_move)
     self.bind("j", self.on_move)
     self.bind("J", self.on_move)
+
+    # with control down, highlight all points in orange, move all together
+    self.bind("<KeyPress-Control_L>", self.on_highlight_all)
+    self.bind("<KeyRelease-Control_L>", self.on_unhighlight_all)
+    self.bind("<Control-Right>", self.on_move_all)
+    self.bind("<Control-Left>", self.on_move_all)
+    self.bind("<Control-Up>", self.on_move_all)
+    self.bind("<Control-Down>", self.on_move_all)
+    self.bind("<Shift-Control-Right>", self.on_move_all)
+    self.bind("<Shift-Control-Left>", self.on_move_all)
+    self.bind("<Shift-Control-Up>", self.on_move_all)
+    self.bind("<Shift-Control-Down>", self.on_move_all)
+    self.bind("<Control-h>", self.on_move_all)
+    self.bind("<Control-l>", self.on_move_all)
+    self.bind("<Control-k>", self.on_move_all)
+    self.bind("<Control-j>", self.on_move_all)
+    self.bind("<Control-H>", self.on_move_all)
+    self.bind("<Control-L>", self.on_move_all)
+    self.bind("<Control-K>", self.on_move_all)
+    self.bind("<Control-J>", self.on_move_all)
+
     self.bind("?", self.on_help)
 
   def update_image(self):
@@ -556,6 +632,8 @@ class AnnotatorApp(tkinter.Tk):
     self.canvas.tag_bind("keypoint", "<B1-Motion>",
         self.on_keypoint_motion)
     self.canvas.bind("<ButtonPress-1>", self.on_quick_keypoint_fix)
+    self.canvas.bind("<4>", self.on_move)
+    self.canvas.bind("<5>", self.on_move)
 
   def create_keypoints(self):
     """Creates the keypoints and draw them to the screen, hiding their
@@ -636,8 +714,8 @@ def process_arguments():
       type=int, default=0, help="Number of frames to cache in a video stream (defaults to %(default)s; a value smaller or equal to zero disables the cache)")
 
   parser.add_argument('-z', '--zoom', dest='zoom', metavar='N',
-      type=int, default=3,
-      help="Zoom in by the given factor (defaults to %(default)s)")
+      type=float, default=1,
+      help="Zoom in/out by the given factor (defaults to %(default)s; values between 0 and 1 will zoom-out while values greater then 1 will zoom-in)")
 
   parser.add_argument('-d', '--annotation-radius', dest='radius',
       metavar='N', type=int, default=2, 
