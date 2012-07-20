@@ -8,7 +8,7 @@
 
 import os
 import sys
-from PIL import Image
+import bob
 
 def load_input(filename, shape):
   """Loads the keypoint input file, checks the input shape for problems."""
@@ -23,21 +23,6 @@ def load_input(filename, shape):
   check_input(data, header, shape)
 
   return data, header
-
-def load_video(filename):
-  """Transforms the input numpy ndarray sequence into something more suitable
-  for TkInter interaction"""
-
-  import bob
-
-  retval = []
-  reader = bob.io.VideoReader(filename)
-  for frame in reader: 
-    sys.stdout.write('.')
-    sys.stdout.flush()
-    retval.append(Image.merge('RGB', [Image.fromarray(frame[k]) for k in range(3)]))
-
-  return retval, reader.frame_rate
 
 def process_arguments():
 
@@ -97,38 +82,31 @@ def process_arguments():
 def annotate(frame, annotations, header, R):
   """Annotates the frame with nice markings"""
 
-  from PIL import ImageDraw
+  from PIL import Image, ImageDraw
+  import numpy
 
-  draw = ImageDraw.ImageDraw(frame)
+  img = Image.merge('RGB', [Image.fromarray(frame[i]) for i in range(3)])
+  draw = ImageDraw.ImageDraw(img)
   for (x,y) in annotations:
     draw.ellipse((x-R,y-R,x+R,y+R), fill='yellow', outline='black')
-  return frame
+  return numpy.transpose(numpy.dstack(img.split()), axes=(2,0,1))
 
-def dump(video, data, header, radius, output, framerate):
+def dump(video, data, header, radius, output):
   """Dumps the annotated video"""
-
-  import bob
-  import numpy
 
   sys.stdout.write("Creating video file with annotations")
   sys.stdout.flush()
-  for k in range(len(video)):
+  outv = bob.io.VideoWriter(output, video.height, video.width, framerate=video.frame_rate)
+
+  for k, frame in enumerate(video):
     if data.has_key(k):
+      outv.append(annotate(frame, data[k], header, radius))
       sys.stdout.write('.')
       sys.stdout.flush()
-      video[k] = annotate(video[k], data[k], header, radius)
     else:
+      outv.append(frame)
       sys.stdout.write('x')
       sys.stdout.flush()
-
-  sys.stdout.write(' OK!\nSaving %d frames at "%s"' % (len(video), output))
-  sys.stdout.flush()
-  outv = bob.io.VideoWriter(output, video[0].size[1], video[0].size[0], framerate=framerate)
-  for frame in video:
-    f = numpy.transpose(numpy.dstack(frame.split()), axes=(2,0,1))
-    outv.append(f)
-    sys.stdout.write('.')
-    sys.stdout.flush()
 
   sys.stdout.write(' OK!\n')
   sys.stdout.flush()
@@ -139,12 +117,12 @@ def main():
  
   sys.stdout.write("Loading input at '%s'..." % (args.video,))
   sys.stdout.flush()
-  v, rate = load_video(args.video)
+  v = bob.io.VideoReader(args.video)
 
   sys.stdout.write("OK!\nLoading keypoint configuration at '%s'..." % \
       (args.keypoints,))
   sys.stdout.flush()
-  data, header = load_input(args.keypoints, (len(v), v[0].size[1], v[0].size[0]))
+  data, header = load_input(args.keypoints, (len(v), v.height, v.width))
 
   if args.algo != 'none':
     sys.stdout.write("OK!\nPost-processing annotations with '%s'..." %
@@ -156,10 +134,11 @@ def main():
     elif args.algo == 'expand':
       from ...algorithm import past_expand
       data = past_expand(data, len(v))
-    sys.stdout.write(" OK!\n")
-    sys.stdout.flush()
 
-  dump(v, data, header, args.radius, args.output, rate)
+  sys.stdout.write(" OK!\n")
+  sys.stdout.flush()
+
+  dump(v, data, header, args.radius, args.output)
 
 if __name__ == '__main__':
   main()

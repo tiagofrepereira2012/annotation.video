@@ -204,7 +204,7 @@ class AnnotatorApp(tkinter.Tk):
   """A wrapper for the annotation application"""
   
   def __init__(self, video, zoom, radius, skip_factor, config, input, 
-      output, *args, **kwargs):
+      output, start, *args, **kwargs):
 
     tkinter.Tk.__init__(self, *args, **kwargs)
     self.title("annotate")
@@ -216,7 +216,7 @@ class AnnotatorApp(tkinter.Tk):
     self.radius = radius
     self.shape = (int(round(zoom*video.shape[2])), 
         int(round(zoom*video.shape[1])))
-    self.curr_frame = 0
+    self.curr_frame = start if start < len(self.video) else (len(self.video)-1)
     self.skip_factor = skip_factor
     self.immediate_keys = '1234567890abcdefg' #max of 17 points
     self.output = output
@@ -305,7 +305,10 @@ class AnnotatorApp(tkinter.Tk):
       header = [l for (x,y,l) in self.keypoint_config]
 
       if self.output: 
-        sys.stdout.write("Writing annotations to '%s'..." % self.output)
+        import time
+        curtime = time.strftime('%H:%M:%S')
+        sys.stdout.write("Writing annotations to '%s' (%s)..." % (self.output,
+          curtime))
         sys.stdout.flush()
         file_save(self.zoom_compensated(), self.output, header=header,
             backup=True)
@@ -810,6 +813,10 @@ def process_arguments():
       metavar='N', type=int, default=5,
       help="Default skip factor for frame and point seeking (if you press SHIFT together with motion keys, we still only move 1 frame/point each time; defaults to %(default)s)")
 
+  parser.add_argument('-S', '--start', dest='start',
+      metavar='N', type=int, default=0,
+      help="Which frame number to display first (defaults to %(default)s)")
+
   parser.add_argument('-o', '--output', dest='output',
       metavar='FILE', type=str, default=None,
       help="Output file that will contain the annotations recorded at this session (if not given, dump to stdout; if file exists, a backup is made)")
@@ -886,7 +893,7 @@ def main():
   sys.stdout.write("Loading input video from '%s' (cache=%d)..." % \
       (args.video, args.cache))
   sys.stdout.flush()
-  v = Video(args.video, N=args.cache)
+  v = Video(args.video, N=args.cache, mid=args.start)
 
   sys.stdout.write("OK!\nLoading keypoint configuration at '%s'..." % \
       (args.config,))
@@ -897,7 +904,7 @@ def main():
   sys.stdout.flush()
 
   app = AnnotatorApp(v, args.zoom, args.radius, args.skip_factor, config,
-      input, args.output)
+      input, args.output, args.start)
   app.mainloop()
 
 if __name__ == '__main__':

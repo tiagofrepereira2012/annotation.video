@@ -18,9 +18,24 @@ def frame_to_pil_image(frame):
 class Video(object):
   """Video cache object compatible with bob.io.VideoReader"""
 
-  def __init__(self, filename, N=0):
+  def __init__(self, filename, N=0, mid=0):
     """Opens and preload N frames into memory. As soon as a non-loaded frame is
     required, load it and load the next N frames as well.
+
+    Parameters
+
+    filename
+      The name of the file to read containing the video
+
+    N
+      The number of frames to cache. In reality (see below), we cache 2N.
+
+    mid
+      If you wouldn't like to start from 0, you can specify an arbitrary number
+      here. This number corresponds to the middle of the range you want to have
+      loaded. The cache will operate from this point minus N to this point plus
+      N, loading a total of 2N frames each time a non-cached frame is
+      requested.
     """
 
     self.video = bob.io.VideoReader(filename)
@@ -28,11 +43,11 @@ class Video(object):
     self.prefix = None
     self.suffix = None
     
-    self.start = 0
-    
-    if N >= 0:
-      self.end = self.N if self.N < len(self.video) else len(self.video)
+    if N > 0 and N < len(self.video) and mid >=0:
+      self.start = mid-N if (mid-N) >= 0 else 0
+      self.end = mid+N if (mid+N) <= len(self.video) else len(self.video)
     else:
+      self.start = 0
       self.end = len(self.video)
 
     self.loaded = [frame_to_pil_image(frame) for frame in self.video[self.start:self.end]]
