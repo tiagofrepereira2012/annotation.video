@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # vim: set fileencoding=utf-8 :
 # Andre Anjos <andre.anjos@idiap.ch>
-#  Mon 25 Jun 2012 13:21:06 CEST
+# Mon 25 Jun 2012 13:21:06 CEST
 
 from setuptools import setup, find_packages
 

@@ -11,7 +11,7 @@ package. Start by cloning this project with something like (shell commands are
 marked with a ``$`` signal)::
 
   $ git clone --depth=1 https://github.com/bioidiap/annotation.video.git
-  $ cd annotation
+  $ cd annotation.video
   $ rm -rf .git # you don't need the git directories...
 
 Installation of the toolkit uses the `buildout <http://www.buildout.org/>`_
